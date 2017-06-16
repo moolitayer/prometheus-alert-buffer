@@ -21,7 +21,6 @@ const (
 type messageStore interface {
 	append(topic string, data interface{}) error
 	get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error)
-	close() error
 }
 
 type boltStore struct {
