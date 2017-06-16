@@ -27,7 +27,10 @@ func (s *testMessageStore) append(topic string, v interface{}) error {
 }
 
 func (s *testMessageStore) get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error) {
-	i := int(fromIndex)
+	i := int(fromIndex)-1
+	if i < 0 {
+		i = 0
+	}
 	return &MessagesResponse{
 		GenerationID: generationID,
 		Messages:     s.messages[i:],
@@ -114,6 +117,7 @@ func runWatchTest(t *testing.T, test struct {
 				if item != submittedMessages[receivedItems] {
 					t.Fatalf("expected received message %s to equal sent message %s", item, submittedMessages[receivedItems])
 				}
+				t.Logf("item %v == %v", item, submittedMessages[receivedItems])
 				receivedItems++
 				if receivedItems == test.messageCount {
 					return
