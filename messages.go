@@ -15,12 +15,3 @@ type Message struct {
 	Timestamp time.Time   `json:"timestamp"`
 	Data      interface{} `json:"data"`
 }
-
-// A JSONString is a string that gets marshalled verbatim into JSON,
-// as it is expected to already contain valid JSON.
-type JSONString string
-
-// MarshalJSON implements json.Marshaler.
-func (js JSONString) MarshalJSON() ([]byte, error) {
-	return []byte(js), nil
-}
