@@ -13,11 +13,11 @@ import (
 
 type watchManager struct {
 	upgrader     *websocket.Upgrader
-	store        notificationStore
+	store        messageStore
 	pushInterval time.Duration
 }
 
-func newWatchManager(store notificationStore, pushInterval time.Duration) *watchManager {
+func newWatchManager(store messageStore, pushInterval time.Duration) *watchManager {
 	return &watchManager{
 		upgrader:     &websocket.Upgrader{},
 		store:        store,
@@ -60,17 +60,17 @@ func (wm *watchManager) manageWatch(conn *websocket.Conn, topic, genID string, i
 	log.Printf("connection accepted from %v", conn.RemoteAddr())
 	defer closeConn(conn)
 	for {
-		notificationResponse, err := wm.store.get(topic, genID, idx)
+		msgsResponse, err := wm.store.get(topic, genID, idx)
 		if err != nil {
 			handleError(err, conn)
 			return
 		}
-		if notificationsLength := len(notificationResponse.Notifications); notificationsLength > 0 {
-			if err := conn.WriteJSON(notificationResponse); err != nil {
+		if msgsLength := len(msgsResponse.Messages); msgsLength > 0 {
+			if err := conn.WriteJSON(msgsResponse); err != nil {
 				handleError(err, conn)
 				return
 			}
-			idx = notificationResponse.Notifications[notificationsLength-1].Index
+			idx = msgsResponse.Messages[msgsLength-1].Index
 		}
 		time.Sleep(wm.pushInterval)
 	}

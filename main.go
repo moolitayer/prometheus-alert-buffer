@@ -13,15 +13,15 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// A NotificationsResponse contains a sequence of notifications for a given generation ID.
-type NotificationsResponse struct {
-	GenerationID  string         `json:"generationID"`
-	Notifications []Notification `json:"notifications"`
+// A MessagesResponse contains a sequence of messages for a given generation ID.
+type MessagesResponse struct {
+	GenerationID string    `json:"generationID"`
+	Messages     []Message `json:"messages"`
 }
 
-// A Notification models a notification with its data and a sequential index that is valid
+// A Message models a message with its data and a sequential index that is valid
 // within a given generation ID.
-type Notification struct {
+type Message struct {
 	Index     uint64      `json:"index"`
 	Timestamp time.Time   `json:"timestamp"`
 	Data      interface{} `json:"data"`
@@ -36,7 +36,7 @@ func (js JSONString) MarshalJSON() ([]byte, error) {
 	return []byte(js), nil
 }
 
-func serve(addr string, store notificationStore, pushInterval time.Duration) error {
+func serve(addr string, store messageStore, pushInterval time.Duration) error {
 	r := mux.NewRouter()
 	r.HandleFunc("/topics/{topic}", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
@@ -78,13 +78,13 @@ func serve(addr string, store notificationStore, pushInterval time.Duration) err
 		}
 
 		vars := mux.Vars(r)
-		notifications, err := store.get(vars["topic"], genID, idx)
+		msgs, err := store.get(vars["topic"], genID, idx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		marshalled, err := json.Marshal(notifications)
+		marshalled, err := json.Marshal(msgs)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -103,9 +103,9 @@ func serve(addr string, store notificationStore, pushInterval time.Duration) err
 }
 
 func main() {
-	storagePath := flag.String("storage-path", "notifications.db", "The path for storing notification data.")
+	storagePath := flag.String("storage-path", "messages.db", "The path for storing message data.")
 	listenAddr := flag.String("listen-address", ":9099", "The address to listen on for web requests.")
-	retention := flag.Duration("retention", 24*time.Hour, "The retention time after which stored notifications will be purged.")
+	retention := flag.Duration("retention", 24*time.Hour, "The retention time after which stored messages will be purged.")
 	gcInterval := flag.Duration("gc-interval", 10*time.Minute, "The interval at which to run garbage collection cycles to purge old entries.")
 	pushInterval := flag.Duration("push-interval", 5*time.Second, "The interval at which to push messages to websocket clients.")
 	flag.Parse()
@@ -116,7 +116,7 @@ func main() {
 		gcInterval: *gcInterval,
 	})
 	if err != nil {
-		log.Fatalln("Error opening notification store:", err)
+		log.Fatalln("Error opening message store:", err)
 	}
 	go store.start()
 	defer store.close()

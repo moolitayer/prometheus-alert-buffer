@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	bucketMetadata      = "metadata"
-	bucketNotifications = "notifications"
+	bucketMetadata = "metadata"
+	bucketMessages = "messages"
 
 	keyGenerationID = "generationID"
 )
 
-type notificationStore interface {
+type messageStore interface {
 	append(topic string, data interface{}) error
-	get(topic string, generationID string, fromIndex uint64) (*NotificationsResponse, error)
+	get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error)
 	close() error
 }
 
@@ -53,9 +53,9 @@ func newBoltStore(opts *boltStoreOptions) (*boltStore, error) {
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(bucketNotifications))
+		_, err := tx.CreateBucketIfNotExists([]byte(bucketMessages))
 		if err != nil {
-			return fmt.Errorf("error creating notifications bucket: %v", err)
+			return fmt.Errorf("error creating messages bucket: %v", err)
 		}
 
 		b, err := tx.CreateBucketIfNotExists([]byte(bucketMetadata))
@@ -104,7 +104,7 @@ func keyFromIndex(index uint64) []byte {
 
 func (bs *boltStore) append(topic string, data interface{}) error {
 	return bs.db.Update(func(tx *bolt.Tx) error {
-		root := tx.Bucket([]byte(bucketNotifications))
+		root := tx.Bucket([]byte(bucketMessages))
 		b, err := root.CreateBucketIfNotExists([]byte(topic))
 		if err != nil {
 			return fmt.Errorf("error creating bucket for topic %q: %v", topic, err)
@@ -114,26 +114,26 @@ func (bs *boltStore) append(topic string, data interface{}) error {
 			return fmt.Errorf("error getting next sequence number: %v", err)
 		}
 
-		n := Notification{
+		n := Message{
 			Index:     idx,
 			Timestamp: time.Now(),
 			Data:      data,
 		}
 		buf, err := json.Marshal(n)
 		if err != nil {
-			return fmt.Errorf("error marshalling notification: %v", err)
+			return fmt.Errorf("error marshalling message: %v", err)
 		}
 		if err := b.Put(keyFromIndex(idx), buf); err != nil {
-			return fmt.Errorf("error appending notification: %v", err)
+			return fmt.Errorf("error appending message: %v", err)
 		}
 		return nil
 	})
 }
 
-func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*NotificationsResponse, error) {
-	ns := []Notification{}
+func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error) {
+	ns := []Message{}
 	err := bs.db.View(func(tx *bolt.Tx) error {
-		root := tx.Bucket([]byte(bucketNotifications))
+		root := tx.Bucket([]byte(bucketMessages))
 		b := root.Bucket([]byte(topic))
 		if b == nil {
 			// Topic doesn't exist yet, return it as an empty set.
@@ -148,10 +148,10 @@ func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*
 			k, v = c.First()
 		}
 
-		var n Notification
+		var n Message
 		for ; k != nil; k, v = c.Next() {
 			if err := json.Unmarshal(v, &n); err != nil {
-				return fmt.Errorf("unable to unmarshal notification: %v", err)
+				return fmt.Errorf("unable to unmarshal message: %v", err)
 			}
 
 			ns = append(ns, n)
@@ -162,16 +162,16 @@ func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*
 		return nil, err
 	}
 
-	return &NotificationsResponse{
-		GenerationID:  bs.generationID,
-		Notifications: ns,
+	return &MessagesResponse{
+		GenerationID: bs.generationID,
+		Messages:     ns,
 	}, nil
 }
 
 func (bs *boltStore) gc(olderThan time.Time) (int, error) {
 	var numDeleted int
 	return numDeleted, bs.db.Update(func(tx *bolt.Tx) error {
-		root := tx.Bucket([]byte(bucketNotifications))
+		root := tx.Bucket([]byte(bucketMessages))
 		rootC := root.Cursor()
 
 		for topic, _ := rootC.First(); topic != nil; topic, _ = rootC.Next() {
@@ -182,15 +182,15 @@ func (bs *boltStore) gc(olderThan time.Time) (int, error) {
 			// glitches on a machine and timestamps end up being out of order.
 			//
 			// TODO: Possibly reconsider this for performance reasons if the DB gets huge.
-			var n Notification
+			var n Message
 			for k, v := c.First(); k != nil; k, v = c.Next() {
 				if err := json.Unmarshal(v, &n); err != nil {
-					return fmt.Errorf("unable to unmarshal notification: %v", err)
+					return fmt.Errorf("unable to unmarshal message: %v", err)
 				}
 
 				if n.Timestamp.Before(olderThan) {
 					if err := c.Delete(); err != nil {
-						return fmt.Errorf("unable to delete notification: %v", err)
+						return fmt.Errorf("unable to delete message: %v", err)
 					}
 					numDeleted++
 				}

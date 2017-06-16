@@ -13,28 +13,28 @@ import (
 
 var subject = "watchManager"
 
-type testNotificationStore struct {
-	notifications []Notification
+type testMessageStore struct {
+	messages []Message
 }
 
-func (s *testNotificationStore) append(topic string, v interface{}) error {
-	s.notifications = append(s.notifications, Notification{
-		Index:     uint64(len(s.notifications) + 1),
+func (s *testMessageStore) append(topic string, v interface{}) error {
+	s.messages = append(s.messages, Message{
+		Index:     uint64(len(s.messages) + 1),
 		Timestamp: time.Now(),
 		Data:      v,
 	})
 	return nil
 }
 
-func (s *testNotificationStore) get(topic string, generationID string, fromIndex uint64) (*NotificationsResponse, error) {
+func (s *testMessageStore) get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error) {
 	i := int(fromIndex)
-	return &NotificationsResponse{
-		GenerationID:  generationID,
-		Notifications: s.notifications[i:],
+	return &MessagesResponse{
+		GenerationID: generationID,
+		Messages:     s.messages[i:],
 	}, nil
 }
 
-func (s *testNotificationStore) close() error {
+func (s *testMessageStore) close() error {
 	return nil
 }
 
@@ -69,7 +69,7 @@ func runWatchTest(t *testing.T, test struct {
 }) {
 	t.Logf("When %s, %s should %s", test.context, subject, test.expectation)
 
-	store := &testNotificationStore{}
+	store := &testMessageStore{}
 	dialer := websocket.DefaultDialer
 	r := mux.NewRouter()
 	watchManager := newWatchManager(store, test.pushInterval)
@@ -85,15 +85,15 @@ func runWatchTest(t *testing.T, test struct {
 	if err != nil {
 		t.Fatalf("unexpected error connecting: %v\nresponse: %#v", err, resp)
 	}
-	messageChan := make(chan *NotificationsResponse)
+	messageChan := make(chan *MessagesResponse)
 	go func() {
 		defer close(messageChan)
 		for {
-			var notificationsResponse *NotificationsResponse
-			if err := conn.ReadJSON(&notificationsResponse); err != nil {
+			var messagesResponse *MessagesResponse
+			if err := conn.ReadJSON(&messagesResponse); err != nil {
 				return
 			}
-			messageChan <- notificationsResponse
+			messageChan <- messagesResponse
 		}
 	}()
 
@@ -112,9 +112,9 @@ func runWatchTest(t *testing.T, test struct {
 		select {
 		case <-time.After((test.pushInterval + test.messageDelay) * time.Duration(test.messageCount)):
 			t.Fatal("timed out waiting for messages to be received")
-		case notificationsResponse := <-messageChan:
-			for _, notification := range notificationsResponse.Notifications {
-				item := notification.Data.(string)
+		case messagesResponse := <-messageChan:
+			for _, msg := range messagesResponse.Messages {
+				item := msg.Data.(string)
 				if item != submittedMessages[receivedItems] {
 					t.Fatalf("expected received message %s to equal sent message %s", item, submittedMessages[receivedItems])
 				}
