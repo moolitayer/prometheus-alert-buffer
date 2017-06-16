@@ -34,10 +34,6 @@ func (s *testMessageStore) get(topic string, generationID string, fromIndex uint
 	}, nil
 }
 
-func (s *testMessageStore) close() error {
-	return nil
-}
-
 func TestWatch(t *testing.T) {
 	var tests = []struct {
 		context      string
