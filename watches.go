@@ -57,7 +57,7 @@ func (wm *watchManager) handleWatchRequest(w http.ResponseWriter, r *http.Reques
 }
 
 func (wm *watchManager) manageWatch(conn *websocket.Conn, topic, genID string, idx uint64) {
-	log.Printf("connection accepted from %v", conn.RemoteAddr())
+	log.Printf("Connection accepted from %v", conn.RemoteAddr())
 	defer closeConn(conn)
 	for {
 		msgsResponse, err := wm.store.get(topic, genID, idx)
@@ -77,13 +77,13 @@ func (wm *watchManager) manageWatch(conn *websocket.Conn, topic, genID string, i
 }
 
 func closeConn(conn *websocket.Conn) {
-	log.Printf("terminating connection to %v", conn.RemoteAddr())
+	log.Printf("Terminating connection to %v", conn.RemoteAddr())
 	if err := conn.Close(); err != nil {
 		log.Printf("[WARNING] error closing connection: %v", err)
 	}
 }
 
 func handleError(err error, conn *websocket.Conn) error {
-	log.Printf("closing connection due to error: %v", err)
+	log.Printf("Closing connection due to error: %v", err)
 	return conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
 }

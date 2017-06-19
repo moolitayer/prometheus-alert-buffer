@@ -49,8 +49,8 @@ func TestWatch(t *testing.T) {
 			context:      "New messages created every 1s",
 			expectation:  "send messages to client every pushInterval",
 			messageCount: 10,
-			messageDelay: time.Second,
-			pushInterval: time.Second * 2,
+			messageDelay: time.Millisecond,
+			pushInterval: time.Millisecond * 2,
 		},
 	}
 
@@ -73,12 +73,12 @@ func runWatchTest(t *testing.T, test struct {
 	r := mux.NewRouter()
 	watchManager := newWatchManager(store, test.pushInterval)
 
-	r.HandleFunc("/{topic}/watch", watchManager.handleWatchRequest)
+	r.HandleFunc("/topics/{topic}/watch", watchManager.handleWatchRequest)
 	server := httptest.NewServer(r)
 	defer server.Close()
 	u, _ := url.Parse(server.URL)
 	u.Scheme = "ws"
-	u.Path = "/mytopic/watch"
+	u.Path = "/topics/mytopic/watch"
 
 	conn, resp, err := dialer.Dial(u.String(), nil)
 	if err != nil {
@@ -117,7 +117,7 @@ func runWatchTest(t *testing.T, test struct {
 				if item != submittedMessages[receivedItems] {
 					t.Fatalf("expected received message %s to equal sent message %s", item, submittedMessages[receivedItems])
 				}
-				t.Logf("item %v == %v", item, submittedMessages[receivedItems])
+				t.Logf("Item %v == %v", item, submittedMessages[receivedItems])
 				receivedItems++
 				if receivedItems == test.messageCount {
 					return

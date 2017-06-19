@@ -72,7 +72,7 @@ func serve(addr string, store messageStore, pushInterval time.Duration) error {
 	}).Methods("GET")
 
 	watchManager := newWatchManager(store, pushInterval)
-	r.HandleFunc("/{topic}/watch", watchManager.handleWatchRequest)
+	r.HandleFunc("/topics/{topic}/watch", watchManager.handleWatchRequest)
 
 	return http.ListenAndServe(addr, r)
 }

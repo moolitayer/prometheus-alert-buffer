@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"time"
+	"fmt"
 )
 
 func main() {
@@ -14,17 +15,21 @@ func main() {
 	pushInterval := flag.Duration("push-interval", 5*time.Second, "The interval at which to push messages to websocket clients.")
 	flag.Parse()
 
+	log.Fatal(runService(*storagePath, *listenAddr, *retention, *gcInterval, *pushInterval))
+}
+
+func runService(storagePath, listenAddr string, retention, gcInterval, pushInterval time.Duration) error {
 	store, err := newBoltStore(&boltStoreOptions{
-		path:       *storagePath,
-		retention:  *retention,
-		gcInterval: *gcInterval,
+		path:       storagePath,
+		retention:  retention,
+		gcInterval: gcInterval,
 	})
 	if err != nil {
-		log.Fatalln("Error opening message store:", err)
+		return fmt.Errorf("Error opening message store:%v", err)
 	}
 	go store.start()
 	defer store.close()
 
-	log.Printf("Listening on %v...", *listenAddr)
-	log.Fatalln(serve(*listenAddr, store, *pushInterval))
+	log.Printf("Listening on %v...", listenAddr)
+	return serve(listenAddr, store, pushInterval)
 }
