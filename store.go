@@ -1,10 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -85,6 +85,7 @@ func (bs *boltStore) start() {
 		select {
 		case <-bs.stop:
 			close(bs.done)
+			return
 		case <-gcTicker.C:
 			log.Println("Running GC cycle to remove old entries...")
 			num, err := bs.gc(time.Now().Add(-bs.options.retention))
@@ -98,7 +99,10 @@ func (bs *boltStore) start() {
 }
 
 func keyFromIndex(index uint64) []byte {
-	return []byte(strconv.FormatUint(index, 10))
+	buf := make([]byte, 8)
+	// This needs to be BigEndian so that keys are stored in numeric sort order.
+	binary.BigEndian.PutUint64(buf, index)
+	return buf
 }
 
 func (bs *boltStore) append(topic string, data interface{}) error {
