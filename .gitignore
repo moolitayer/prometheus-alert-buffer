@@ -1,2 +1,2 @@
-notifications.db
-webhook-logger
+messages.db
+message-buffer

@@ -1,4 +1,4 @@
-# Webhook Logger
+# Message Buffer
 
 This simple server accepts incoming JSON objects over HTTP, stores them in a
 database, and makes them queryable by index via HTTP.
@@ -9,7 +9,7 @@ database, and makes them queryable by index via HTTP.
 
 ## Run
 
-    ./webhook-logger
+    ./message-buffer
 
 ## Send JSON objects
 

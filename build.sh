@@ -1,15 +1,15 @@
 #!/bin/sh
-IMAGENAME=${IMAGENAME:-juliusv/webhook-logger}
-EXTRACTNAME=${EXTRACTNAME:-webhook-logger-extract}
+IMAGENAME=${IMAGENAME:-juliusv/message-buffer}
+EXTRACTNAME=${EXTRACTNAME:-message-buffer-extract}
 
 echo Building ${IMAGENAME}:build
 
-docker build -t juliusv/webhook-logger:build . -f Dockerfile.build
+docker build -t juliusv/message-buffer:build . -f Dockerfile.build
 
-docker create --name ${EXTRACTNAME} juliusv/webhook-logger:build
-docker cp ${EXTRACTNAME}:/go/bin/webhook-logger webhook-logger
+docker create --name ${EXTRACTNAME} juliusv/message-buffer:build
+docker cp ${EXTRACTNAME}:/go/bin/message-buffer message-buffer
 docker rm -f ${EXTRACTNAME}
 
 echo Building ${IMAGENAME}:latest
 
-docker build --no-cache -t ${IMAGENAME:-juliusv/webhook-logger}:latest .
+docker build --no-cache -t ${IMAGENAME:-juliusv/message-buffer}:latest .

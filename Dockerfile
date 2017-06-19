@@ -1,9 +1,9 @@
 FROM        quay.io/prometheus/busybox:latest
 MAINTAINER  The Prometheus Authors <prometheus-developers@googlegroups.com>
 
-COPY         webhook-logger /bin/webhook-logger
+COPY         message-buffer /bin/message-buffer
 
 EXPOSE       9099
-VOLUME       [ "/webhook-logger" ]
-WORKDIR      /webhook-logger
-ENTRYPOINT   [ "/bin/webhook-logger" ]
+VOLUME       [ "/message-buffer" ]
+WORKDIR      /message-buffer
+ENTRYPOINT   [ "/bin/message-buffer" ]
