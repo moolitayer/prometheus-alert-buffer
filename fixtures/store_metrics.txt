@@ -1,0 +1,22 @@
+# HELP message_store_appends_total The total number of messages appended (including append failures) to the message store by topic.
+# TYPE message_store_appends_total counter
+message_store_appends_total{topic="topicA"} 5
+message_store_appends_total{topic="topicB"} 10
+# HELP message_store_gc_duration_seconds The distribution of message store garbage collection cycle durations in seconds.
+# TYPE message_store_gc_duration_seconds histogram
+message_store_gc_duration_seconds_bucket{le="0.1"} 10
+message_store_gc_duration_seconds_bucket{le="0.5"} 10
+message_store_gc_duration_seconds_bucket{le="1"} 10
+message_store_gc_duration_seconds_bucket{le="5"} 10
+message_store_gc_duration_seconds_bucket{le="10"} 10
+message_store_gc_duration_seconds_bucket{le="30"} 10
+message_store_gc_duration_seconds_bucket{le="60"} 10
+message_store_gc_duration_seconds_bucket{le="120"} 10
+message_store_gc_duration_seconds_bucket{le="300"} 10
+message_store_gc_duration_seconds_bucket{le="+Inf"} 10
+message_store_gc_duration_seconds_sum 0.042188809
+message_store_gc_duration_seconds_count 10
+# HELP message_store_gets_total The total number of retrieved messages (including retrieval failures) from the message store by topic.
+# TYPE message_store_gets_total counter
+message_store_gets_total{topic="topicA"} 15
+message_store_gets_total{topic="topicB"} 20
