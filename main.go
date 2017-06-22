@@ -2,9 +2,12 @@ package main
 
 import (
 	"flag"
-	"log"
-	"time"
 	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func main() {
@@ -19,10 +22,16 @@ func main() {
 }
 
 func runService(storagePath, listenAddr string, retention, gcInterval, pushInterval time.Duration) error {
+	registry := prometheus.NewRegistry()
+	// Go-specific metrics about the process (GC stats, goroutines, etc.).
+	registry.MustRegister(prometheus.NewGoCollector())
+	// Go-unrelated process metrics (memory usage, file descriptors, etc.).
+	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
 	store, err := newBoltStore(&boltStoreOptions{
 		path:       storagePath,
 		retention:  retention,
 		gcInterval: gcInterval,
+		registry:   registry,
 	})
 	if err != nil {
 		return fmt.Errorf("Error opening message store:%v", err)
@@ -31,5 +40,5 @@ func runService(storagePath, listenAddr string, retention, gcInterval, pushInter
 	defer store.close()
 
 	log.Printf("Listening on %v...", listenAddr)
-	return serve(listenAddr, store, pushInterval)
+	return serve(listenAddr, pushInterval, store, registry)
 }

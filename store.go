@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -28,6 +29,12 @@ type boltStore struct {
 	generationID string
 	options      *boltStoreOptions
 
+	totalAppends  *prometheus.CounterVec
+	failedAppends *prometheus.CounterVec
+	totalGets     *prometheus.CounterVec
+	failedGets    *prometheus.CounterVec
+	gcDuration    prometheus.Histogram
+
 	stop chan struct{}
 	done chan struct{}
 }
@@ -36,6 +43,8 @@ type boltStoreOptions struct {
 	retention  time.Duration
 	gcInterval time.Duration
 	path       string
+
+	registry *prometheus.Registry
 }
 
 func newBoltStore(opts *boltStoreOptions) (*boltStore, error) {
@@ -49,6 +58,36 @@ func newBoltStore(opts *boltStoreOptions) (*boltStore, error) {
 		options: opts,
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
+
+		totalAppends: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "message_store_appends_total",
+			Help: "The total number of messages appended (including append failures) to the message store by topic.",
+		}, []string{"topic"}),
+		failedAppends: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "message_store_appends_failed_total",
+			Help: "The total number of failed appends to the message store by topic.",
+		}, []string{"topic"}),
+		totalGets: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "message_store_gets_total",
+			Help: "The total number of retrieved messages (including retrieval failures) from the message store by topic.",
+		}, []string{"topic"}),
+		failedGets: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "message_store_gets_failed_total",
+			Help: "The total number of failed retrievals from the message store by topic.",
+		}, []string{"topic"}),
+		gcDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "message_store_gc_duration_seconds",
+			Help:    "The distribution of message store garbage collection cycle durations in seconds.",
+			Buckets: []float64{0.1, 0.5, 1, 5, 10, 30, 60, 120, 300},
+		}),
+	}
+
+	if opts.registry != nil {
+		opts.registry.Register(store.totalAppends)
+		opts.registry.Register(store.failedAppends)
+		opts.registry.Register(store.totalGets)
+		opts.registry.Register(store.failedGets)
+		opts.registry.Register(store.gcDuration)
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
@@ -106,7 +145,7 @@ func keyFromIndex(index uint64) []byte {
 }
 
 func (bs *boltStore) append(topic string, data interface{}) error {
-	return bs.db.Update(func(tx *bolt.Tx) error {
+	err := bs.db.Update(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(bucketMessages))
 		b, err := root.CreateBucketIfNotExists([]byte(topic))
 		if err != nil {
@@ -131,6 +170,12 @@ func (bs *boltStore) append(topic string, data interface{}) error {
 		}
 		return nil
 	})
+
+	bs.totalAppends.WithLabelValues(topic).Inc()
+	if err != nil {
+		bs.failedAppends.WithLabelValues(topic).Inc()
+	}
+	return err
 }
 
 func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error) {
@@ -161,7 +206,11 @@ func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*
 		}
 		return nil
 	})
+
+	bs.totalGets.WithLabelValues(topic).Inc()
+
 	if err != nil {
+		bs.failedGets.WithLabelValues(topic).Inc()
 		return nil, err
 	}
 
@@ -172,6 +221,11 @@ func (bs *boltStore) get(topic string, generationID string, fromIndex uint64) (*
 }
 
 func (bs *boltStore) gc(olderThan time.Time) (int, error) {
+	start := time.Now()
+	defer func() {
+		bs.gcDuration.Observe(float64(time.Since(start).Seconds()))
+	}()
+
 	var numDeleted int
 	return numDeleted, bs.db.Update(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(bucketMessages))

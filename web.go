@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func serve(addr string, store messageStore, pushInterval time.Duration) error {
+func serve(addr string, pushInterval time.Duration, store messageStore, registry *prometheus.Registry) error {
 	r := mux.NewRouter()
 	r.HandleFunc("/topics/{topic}", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
@@ -73,6 +75,8 @@ func serve(addr string, store messageStore, pushInterval time.Duration) error {
 
 	watchManager := newWatchManager(store, pushInterval)
 	r.HandleFunc("/topics/{topic}/watch", watchManager.handleWatchRequest)
+
+	r.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	return http.ListenAndServe(addr, r)
 }
