@@ -27,7 +27,7 @@ func (s *testMessageStore) append(topic string, v interface{}) error {
 }
 
 func (s *testMessageStore) get(topic string, generationID string, fromIndex uint64) (*MessagesResponse, error) {
-	i := int(fromIndex)-1
+	i := int(fromIndex) - 1
 	if i < 0 {
 		i = 0
 	}

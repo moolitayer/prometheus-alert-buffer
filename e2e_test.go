@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	listenAddr    = ":9099"
+	listenAddr = ":9099"
 )
 
 var (
@@ -29,9 +29,9 @@ func initServer(dir string, t *testing.T) {
 	if serverStarted {
 		return
 	}
-	retention     := 24 * time.Hour
-	gcInterval    := 10 * time.Minute
-	pushInterval  := 1 * time.Millisecond
+	retention := 24 * time.Hour
+	gcInterval := 10 * time.Minute
+	pushInterval := 1 * time.Millisecond
 	serverStarted = true
 	go func() {
 		storagePath := filepath.Join(dir, "messages.db")
