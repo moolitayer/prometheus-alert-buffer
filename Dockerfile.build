@@ -1,4 +1,4 @@
-FROM    golang:1.7.3
+FROM    openshift/origin-release:golang-1.7
 WORKDIR /go/src/github.com/juliusv/message-buffer
 ADD     . /go/src/github.com/juliusv/message-buffer
 RUN     CGO_ENABLED=0 GOOS=linux go install -a -installsuffix cgo .
