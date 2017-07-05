@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 IMAGENAME=${IMAGENAME:-juliusv/message-buffer}
 EXTRACTNAME=${EXTRACTNAME:-message-buffer-extract}
 
