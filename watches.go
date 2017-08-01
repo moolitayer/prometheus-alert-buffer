@@ -70,6 +70,7 @@ func (wm *watchManager) manageWatch(conn *websocket.Conn, topic, genID string, i
 				handleError(err, conn)
 				return
 			}
+			genID = msgsResponse.GenerationID
 			idx = msgsResponse.Messages[msgsLength-1].Index + 1
 		}
 		time.Sleep(wm.pushInterval)
