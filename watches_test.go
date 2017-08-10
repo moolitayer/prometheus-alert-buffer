@@ -1,14 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
 )
 
 var subject = "watchManager"
@@ -69,7 +71,6 @@ func runWatchTest(t *testing.T, test struct {
 	t.Logf("When %s, %s should %s", test.context, subject, test.expectation)
 
 	store := &testMessageStore{}
-	dialer := websocket.DefaultDialer
 	r := mux.NewRouter()
 	watchManager := newWatchManager(store, test.pushInterval)
 
@@ -77,22 +78,29 @@ func runWatchTest(t *testing.T, test struct {
 	server := httptest.NewServer(r)
 	defer server.Close()
 	u, _ := url.Parse(server.URL)
-	u.Scheme = "ws"
 	u.Path = "/topics/mytopic/watch"
 
-	conn, resp, err := dialer.Dial(u.String(), nil)
-	if err != nil {
-		t.Fatalf("unexpected error connecting: %v\nresponse: %#v", err, resp)
-	}
 	messageChan := make(chan *MessagesResponse)
 	go func() {
 		defer close(messageChan)
+		resp, err := http.Get(u.String())
+		defer resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		reader := httputil.NewChunkedReader(resp.Body)
+		dec := json.NewDecoder(reader)
 		for {
-			var messagesResponse *MessagesResponse
-			if err := conn.ReadJSON(&messagesResponse); err != nil {
+			msgs := MessagesResponse{}
+			if err := dec.Decode(&msgs); err != nil {
+				t.Fatal(err)
 				return
 			}
-			messageChan <- messagesResponse
+			messageChan <- &msgs
+			if int(msgs.Messages[len(msgs.Messages)-1].Index) == test.messageCount {
+				return
+			}
 		}
 	}()
 
@@ -100,7 +108,7 @@ func runWatchTest(t *testing.T, test struct {
 	go func() {
 		for i := 0; i < test.messageCount; i++ {
 			item := fmt.Sprintf("{test packet #%v}", i)
-			store.append("testtopic", item)
+			store.append("mytopic", item)
 			submittedMessages = append(submittedMessages, item)
 			time.Sleep(test.messageDelay)
 		}

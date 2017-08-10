@@ -1,27 +1,48 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
 )
 
 type watchManager struct {
-	upgrader     *websocket.Upgrader
 	store        messageStore
 	pushInterval time.Duration
 }
 
 func newWatchManager(store messageStore, pushInterval time.Duration) *watchManager {
 	return &watchManager{
-		upgrader:     &websocket.Upgrader{},
 		store:        store,
 		pushInterval: pushInterval,
+	}
+}
+
+type activeWatch struct {
+	wm      *watchManager
+	topic   string
+	genID   string
+	idx     uint64
+	cw      io.WriteCloser
+	flusher http.Flusher
+}
+
+func newActiveWatch(wm *watchManager, topic string, genID string, idx uint64, cw io.WriteCloser, flusher http.Flusher) *activeWatch {
+	return &activeWatch{
+		wm:      wm,
+		topic:   topic,
+		genID:   genID,
+		cw:      cw,
+		idx:     idx,
+		flusher: flusher,
 	}
 }
 
@@ -30,13 +51,6 @@ func (wm *watchManager) handleWatchRequest(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		log.Printf("Error: topic not provided")
 		http.Error(w, "must provide topic", http.StatusBadRequest)
-		return
-	}
-
-	conn, err := wm.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Failed to upgrade HTTP connection: %v", err)
-		http.Error(w, fmt.Sprintf("failed to upgrade HTTP connection: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -52,39 +66,70 @@ func (wm *watchManager) handleWatchRequest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("invalid 'fromIndex': %v", err), http.StatusBadRequest)
 		return
 	}
-
-	go wm.manageWatch(conn, topic, genID, idx)
+	log.Printf("Connection accepted from %v", r.RemoteAddr)
+	if err = wm.manageWatch(w, topic, genID, idx); err != nil {
+		log.Printf("Error: watch %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
-func (wm *watchManager) manageWatch(conn *websocket.Conn, topic, genID string, idx uint64) {
-	log.Printf("Connection accepted from %v", conn.RemoteAddr())
-	defer closeConn(conn)
+func (wm *watchManager) manageWatch(w http.ResponseWriter, topic string, genID string, idx uint64) error {
+	cn, canNotifyClose := w.(http.CloseNotifier)
+	flusher, canFlush := w.(http.Flusher)
+	if !canNotifyClose || !canFlush {
+		return errors.New("Error: cannot stream")
+	}
+	aw := newActiveWatch(wm, topic, genID, idx, httputil.NewChunkedWriter(w), flusher)
+	defer aw.close()
 	for {
-		msgsResponse, err := wm.store.get(topic, genID, idx)
-		if err != nil {
-			handleError(err, conn)
-			return
-		}
-		if msgsLength := len(msgsResponse.Messages); msgsLength > 0 {
-			if err := conn.WriteJSON(msgsResponse); err != nil {
-				handleError(err, conn)
-				return
+		select {
+		case <-cn.CloseNotify():
+			return nil
+		default:
+			if err := aw.handleNewMessages(); err != nil {
+				return err
 			}
-			genID = msgsResponse.GenerationID
-			idx = msgsResponse.Messages[msgsLength-1].Index + 1
 		}
 		time.Sleep(wm.pushInterval)
 	}
 }
 
-func closeConn(conn *websocket.Conn) {
-	log.Printf("Terminating connection to %v", conn.RemoteAddr())
-	if err := conn.Close(); err != nil {
-		log.Printf("[WARNING] error closing connection: %v", err)
+func (aw *activeWatch) handleNewMessages() error {
+	var err error
+	var msgsResponse *MessagesResponse
+	if msgsResponse, err = aw.newMessages(); err != nil {
+		return err
 	}
+	if msgsLength := len(msgsResponse.Messages); msgsLength > 0 {
+		if err := aw.writeChunk(msgsResponse); err != nil {
+			return err
+		}
+		aw.genID = msgsResponse.GenerationID
+		aw.idx = msgsResponse.Messages[msgsLength-1].Index + 1
+	}
+	return nil
 }
 
-func handleError(err error, conn *websocket.Conn) error {
-	log.Printf("Closing connection due to error: %v", err)
-	return conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+func (aw *activeWatch) newMessages() (*MessagesResponse, error) {
+	return aw.wm.store.get(aw.topic, aw.genID, aw.idx)
+}
+
+func (aw *activeWatch) writeChunk(msgs *MessagesResponse) error {
+	marshalled, err := json.Marshal(msgs)
+	if err != nil {
+		return err
+	}
+	if _, err = aw.cw.Write(marshalled); err != nil {
+		return err
+	}
+	aw.flusher.Flush()
+	return nil
+}
+
+func (aw *activeWatch) close() {
+	log.Println("Connection closed by peer")
+	if err := aw.cw.Close(); err != nil {
+		log.Printf("Error: closing connection %v\n", err)
+	}
 }

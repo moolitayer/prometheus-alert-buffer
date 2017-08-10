@@ -7,14 +7,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -240,30 +239,31 @@ func initiateWatch(topic, genID, fromIdx string) (<-chan *MessagesResponse, <-ch
 	query := make(url.Values)
 	query.Set("generationID", genID)
 	query.Set("fromIndex", fromIdx)
-	u := url.URL{
-		Scheme:   "ws",
-		Host:     "localhost" + listenAddr,
-		Path:     "/topics/" + topic + "/watch",
-		RawQuery: query.Encode(),
-	}
-	print(u.String())
-	conn, resp, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to websocket: %v, response: %#v", err, resp)
-	}
+
 	msgsChan := make(chan *MessagesResponse)
 	errChan := make(chan error)
-	go func() {
-		for {
-			var msgs MessagesResponse
-			if err := conn.ReadJSON(&msgs); err != nil {
-				errChan <- err
-				return
-			}
-			msgsChan <- &msgs
-		}
-	}()
+	go waitForMessages(topic, query, msgsChan, errChan)
+
 	return msgsChan, errChan, nil
+}
+
+func waitForMessages(topic string, query url.Values, msgsChan chan *MessagesResponse, errChan chan error) {
+	resp, err := doHTTPRequest("GET", "/topics/"+topic+"/watch", query, nil)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	reader := httputil.NewChunkedReader(resp.Body)
+	dec := json.NewDecoder(reader)
+	for {
+		msgs := MessagesResponse{}
+		err := dec.Decode(&msgs)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		msgsChan <- &msgs
+	}
 }
 
 func doHTTPRequest(method, path string, query url.Values, body io.Reader) (*http.Response, error) {
